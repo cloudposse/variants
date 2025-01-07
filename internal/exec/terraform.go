@@ -21,7 +21,6 @@ const (
 	outFlag                   = "-out"
 	varFileFlag               = "-var-file"
 	skipTerraformLockFileFlag = "--skip-lock-file"
-	everythingFlag            = "--everything"
 	forceFlag                 = "--force"
 )
 
@@ -75,13 +74,10 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	shouldCheckStack := true
 	// Skip stack processing when cleaning with --everything or --force flags to allow
 	// cleaning without requiring stack configuration
-	if info.SubCommand == "clean" &&
-		(u.SliceContainsString(info.AdditionalArgsAndFlags, everythingFlag) ||
-			u.SliceContainsString(info.AdditionalArgsAndFlags, forceFlag)) {
+	if info.SubCommand == "clean" {
 		if info.ComponentFromArg == "" {
 			shouldProcessStacks = false
 		}
-
 		shouldCheckStack = info.Stack != ""
 
 	}
@@ -96,7 +92,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	}
 
-	if !info.ComponentIsEnabled {
+	if !info.ComponentIsEnabled && info.SubCommand != "clean" {
 		u.LogInfo(atmosConfig, fmt.Sprintf("component '%s' is not enabled and skipped", info.ComponentFromArg))
 		return nil
 	}
