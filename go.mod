@@ -5,6 +5,7 @@ go 1.23.5
 require (
 	dario.cat/mergo v1.0.1
 	github.com/Masterminds/sprig/v3 v3.3.0
+	github.com/adrg/xdg v0.5.3
 	github.com/alecthomas/chroma v0.10.0
 	github.com/arsham/figurine v1.3.0
 	github.com/aws/aws-sdk-go-v2 v1.33.0
@@ -21,6 +22,7 @@ require (
 	github.com/editorconfig-checker/editorconfig-checker/v3 v3.1.2
 	github.com/elewis787/boa v0.1.2
 	github.com/fatih/color v1.18.0
+	github.com/go-git/go-billy/v5 v5.6.1
 	github.com/go-git/go-git/v5 v5.13.1
 	github.com/gofrs/flock v0.12.1
 	github.com/google/go-containerregistry v0.20.3
@@ -146,7 +148,6 @@ require (
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.8 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
-	github.com/go-git/go-billy/v5 v5.6.1 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
