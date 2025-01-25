@@ -3,6 +3,7 @@ package exec
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"text/template"
@@ -252,4 +253,118 @@ func IsGolangTemplate(str string) (bool, error) {
 	}
 
 	return isGoTemplate, nil
+}
+
+// ProcessTmplWithDatasourcesGomplate parses and executes Go templates with datasources using Gomplate
+func ProcessTmplWithDatasourcesGomplate(
+	atmosConfig schema.AtmosConfiguration,
+	settingsSection schema.Settings,
+	tmplName string,
+	tmplValue string,
+	mergedData map[string]interface{},
+	ignoreMissingTemplateValues bool,
+) (string, error) {
+
+	if ignoreMissingTemplateValues {
+		os.Setenv("GOMPLATE_MISSINGKEY", "default")
+		defer os.Unsetenv("GOMPLATE_MISSINGKEY")
+	}
+	// 1) Write the 'inner' data
+	rawJSON, err := json.Marshal(mergedData)
+
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal merged data to JSON: %w", err)
+	}
+	tmpfile, err := os.CreateTemp("", "gomplate-data-*.json")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp data file for gomplate: %w", err)
+	}
+	tmpName := tmpfile.Name()
+	defer os.Remove(tmpName)
+
+	if _, err := tmpfile.Write(rawJSON); err != nil {
+		tmpfile.Close()
+		return "", fmt.Errorf("failed to write JSON to temp file: %w", err)
+	}
+	if err := tmpfile.Close(); err != nil {
+		return "", fmt.Errorf("failed to close temp data file: %w", err)
+	}
+
+	fileURL, err := toFileURL(tmpName)
+	if err != nil {
+		return "", fmt.Errorf("failed to convert temp file path to file URL: %w", err)
+	}
+
+	finalFileUrl, err := fixWindowsFileURL(fileURL)
+	if err != nil {
+		return "", err
+	}
+
+	// 2) Write the 'outer' top-level
+	topLevel := map[string]interface{}{
+		"Env": map[string]interface{}{
+			"README_YAML": fileURL,
+		},
+	}
+	outerJSON, err := json.Marshal(topLevel)
+	if err != nil {
+		return "", err
+	}
+
+	tmpfile2, err := os.CreateTemp("", "gomplate-top-level-*.json")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp data file for top-level: %w", err)
+	}
+	tmpName2 := tmpfile2.Name()
+	defer os.Remove(tmpName2)
+
+	if _, err = tmpfile2.Write(outerJSON); err != nil {
+		tmpfile2.Close()
+		return "", fmt.Errorf("failed to write top-level JSON: %w", err)
+	}
+	if err = tmpfile2.Close(); err != nil {
+		return "", fmt.Errorf("failed to close top-level JSON: %w", err)
+	}
+
+	topLevelFileURL, err := toFileURL(tmpName2)
+	if err != nil {
+		return "", fmt.Errorf("failed to convert top-level temp file path to file URL: %w", err)
+	}
+
+	// This step is crucial on Windows:
+	finalTopLevelFileURL, err := fixWindowsFileURL(topLevelFileURL)
+	if err != nil {
+		return "", err
+	}
+
+	// 3) Construct Gomplate Options
+	opts := gomplate.Options{
+		Context: map[string]gomplate.Datasource{
+			".": {
+				URL: finalTopLevelFileURL,
+			},
+			"config": {
+				URL: finalFileUrl,
+			},
+		},
+		LDelim: "{{",
+		RDelim: "}}",
+		Funcs:  template.FuncMap{},
+	}
+
+	// 4) Render
+	renderer := gomplate.NewRenderer(opts)
+
+	var buf bytes.Buffer
+	tpl := gomplate.Template{
+		Name:   tmplName,
+		Text:   tmplValue,
+		Writer: &buf,
+	}
+
+	if err := renderer.RenderTemplates(context.Background(), []gomplate.Template{tpl}); err != nil {
+		return "", fmt.Errorf("failed to render template: %w", err)
+	}
+
+	return buf.String(), nil
 }
