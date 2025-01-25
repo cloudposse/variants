@@ -15,7 +15,7 @@ tests:
       diff: []
       exit_code: 1
       stderr:
-        - "Error: Invalid log level 'XTrace'. Valid options are: \\[Trace Debug Info Warning Off\\]"
+        - "Error: Invalid log level 'XTrace'\\. Valid options are: \\[Trace, Debug, Info, Warning, Off\\]\n"
 
   - name: "Invalid Log Level in Environment Variable"
     enabled: true
@@ -35,7 +35,7 @@ tests:
       diff: []
       exit_code: 1
       stderr:
-        - "Error: Invalid log level 'XTrace'. Valid options are: \\[Trace Debug Info Warning Off\\]"
+        - "Error: Invalid log level 'XTrace' set in the ATMOS_LOGS_LEVEL environment variable\\. Valid options are: \\[Trace, Debug, Info, Warning, Off\\]\n"
 
   - name: "Valid Log Level in Config File"
     enabled: true
