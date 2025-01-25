@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -42,6 +43,14 @@ var RootCmd = &cobra.Command{
 		} else {
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
+		}
+
+		// Validate logs-level flag if provided
+		if cmd.Flags().Changed("logs-level") {
+			logsLevel, _ := cmd.Flags().GetString("logs-level")
+			if _, err := logger.ParseLogLevel(logsLevel); err != nil {
+				u.LogErrorAndExit(schema.AtmosConfiguration{}, err)
+			}
 		}
 
 		logsLevel, _ := cmd.Flags().GetString("logs-level")
