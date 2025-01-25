@@ -553,12 +553,17 @@ func handleHelpRequest(cmd *cobra.Command, args []string) {
 	}
 }
 
+// showUsageAndExit we display the markdown usage or fallback to our custom usage
+// Markdown usage is not compatible with all outputs. We should therefore have fallback option.
 func showUsageAndExit(cmd *cobra.Command, args []string) {
-
+	if len(args) == 0 {
+		showErrorExampleFromMarkdown(cmd.CommandPath(), "")
+	}
 	var suggestions []string
 	unknownCommand := fmt.Sprintf("Error: Unknown command: %q\n\n", cmd.CommandPath())
 
 	if len(args) > 0 {
+		showErrorExampleFromMarkdown(cmd.CommandPath(), args[0])
 		suggestions = cmd.SuggestionsFor(args[0])
 		unknownCommand = fmt.Sprintf("Error: Unknown command %q for %q\n\n", args[0], cmd.CommandPath())
 	}
@@ -585,6 +590,14 @@ func showUsageAndExit(cmd *cobra.Command, args []string) {
 	}
 	u.PrintMessage(fmt.Sprintf("\nRun '%s --help' for usage", cmd.CommandPath()))
 	os.Exit(1)
+}
+
+func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
+	unknownCommand := fmt.Sprintf("Error: %v for command %q\n\n", err.Error(), cmd.CommandPath())
+	u.PrintErrorInColor(unknownCommand)
+	u.PrintMessage(fmt.Sprintf("Run '%s --help' for usage", cmd.CommandPath()))
+	os.Exit(1)
+	return nil
 }
 
 // getConfigAndStacksInfo gets the
