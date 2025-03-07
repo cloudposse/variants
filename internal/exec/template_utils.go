@@ -3,6 +3,7 @@ package exec
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"text/template"
@@ -252,4 +253,134 @@ func IsGolangTemplate(str string) (bool, error) {
 	}
 
 	return isGoTemplate, nil
+}
+
+// ProcessTmplWithDatasourcesGomplate parses and executes Go templates with datasources using Gomplate
+func ProcessTmplWithDatasourcesGomplate(
+	atmosConfig schema.AtmosConfiguration,
+	settingsSection schema.Settings,
+	tmplName string,
+	tmplValue string,
+	mergedData map[string]interface{},
+	ignoreMissingTemplateValues bool,
+) (string, error) {
+	// The check below is to enable ignore missing template values.
+	//   If `ignoreMissingTemplateValues` is true, the missing template keys are ignored, i.e. it doesn't error out
+	if ignoreMissingTemplateValues {
+		os.Setenv("GOMPLATE_MISSINGKEY", "default")
+		defer os.Unsetenv("GOMPLATE_MISSINGKEY")
+	}
+	// Step 1: Write the merged JSON data to a file
+	// This file will contain the combined data that Gomplate uses to fill in the templates.
+	// Gomplate reads this file directly because it's referenced by the "config" option.
+	rawJSON, err := json.Marshal(mergedData)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal merged data to JSON: %w", err)
+	}
+
+	// Create a temporary file to store JSON data merged from multiple YAML files (e.g., README.yaml).
+	// This file's path is added to the "config" section of the Gomplate options, allowing Gomplate
+	// to reference the data during template processing. The "." entry in the "Context" section
+	// is included to maintain compatibility with an environment variable and ensure proper behavior,
+	// especially on Windows.
+	tmpfile, err := os.CreateTemp("", "gomplate-data-*.json")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp data file for gomplate: %w", err)
+	}
+	tmpName := tmpfile.Name()
+	defer os.Remove(tmpName)
+
+	if _, err := tmpfile.Write(rawJSON); err != nil {
+		tmpfile.Close()
+		return "", fmt.Errorf("failed to write JSON to temp file: %w", err)
+	}
+	if err := tmpfile.Close(); err != nil {
+		return "", fmt.Errorf("failed to close temp data file: %w", err)
+	}
+
+	fileURL, err := toFileScheme(tmpName)
+	if err != nil {
+		return "", fmt.Errorf("failed to convert temp file path to file URL: %w", err)
+	}
+
+	// fixWindowsFileURL transforms the path into a format gomplate can handle uniformly across OSes.
+	finalFileUrl, err := fixWindowsFileScheme(fileURL)
+	if err != nil {
+		return "", err
+	}
+
+	// Step 2: Write the 'outer' top-level
+	// This top-level file acts as the "outer" data source.
+	// It stores a reference (README_YAML) to the 'inner' file here so Gomplate can link the environment-like data to the actual merged file.
+	// Having an outer file allows us to keep a structured hierarchy of references. The "." context references this file.
+	// This separation primarily deals with environment variable README_YAML.
+	topLevel := map[string]interface{}{
+		"Env": map[string]interface{}{
+			"README_YAML": fileURL,
+		},
+	}
+	outerJSON, err := json.Marshal(topLevel)
+	if err != nil {
+		return "", err
+	}
+
+	tmpfile2, err := os.CreateTemp("", "gomplate-top-level-*.json")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp data file for top-level: %w", err)
+	}
+	tmpName2 := tmpfile2.Name()
+	defer os.Remove(tmpName2)
+
+	if _, err = tmpfile2.Write(outerJSON); err != nil {
+		tmpfile2.Close()
+		return "", fmt.Errorf("failed to write top-level JSON: %w", err)
+	}
+	if err = tmpfile2.Close(); err != nil {
+		return "", fmt.Errorf("failed to close top-level JSON: %w", err)
+	}
+
+	topLevelFileURL, err := toFileScheme(tmpName2)
+	if err != nil {
+		return "", fmt.Errorf("failed to convert top-level temp file path to file URL: %w", err)
+	}
+
+	// This step is crucial on Windows:
+	finalTopLevelFileURL, err := fixWindowsFileScheme(topLevelFileURL)
+	if err != nil {
+		return "", err
+	}
+
+	// 3) Construct Gomplate Options
+	//    - "." is mapped to the top-level JSON file (the 'outer' file).
+	//    - "config" points to the 'inner' JSON file containing your merged data.
+	//    This approach gives Gomplate two layers of data:
+	//      1) outer top-level structure for environment or other references,
+	//      2) inner merged data for actual template substitution.
+	opts := gomplate.Options{
+		Context: map[string]gomplate.Datasource{
+			".": {
+				URL: finalTopLevelFileURL,
+			},
+			"config": {
+				URL: finalFileUrl,
+			},
+		},
+		Funcs: template.FuncMap{},
+	}
+
+	// 4) Render
+	renderer := gomplate.NewRenderer(opts)
+
+	var buf bytes.Buffer
+	tpl := gomplate.Template{
+		Name:   tmplName,
+		Text:   tmplValue,
+		Writer: &buf,
+	}
+
+	if err := renderer.RenderTemplates(context.Background(), []gomplate.Template{tpl}); err != nil {
+		return "", fmt.Errorf("failed to render template: %w", err)
+	}
+
+	return buf.String(), nil
 }
