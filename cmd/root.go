@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -47,16 +48,6 @@ var RootCmd = &cobra.Command{
 			cmd.SilenceErrors = true
 		}
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
-		// TODO: Check if these value being set was actually required
-		if cmd.Flags().Changed("logs-level") {
-			logsLevel, _ := cmd.Flags().GetString("logs-level")
-			configAndStacksInfo.LogsLevel = logsLevel
-		}
-		if cmd.Flags().Changed("logs-file") {
-			logsFile, _ := cmd.Flags().GetString("logs-file")
-			configAndStacksInfo.LogsFile = logsFile
-		}
-
 		// Only validate the config, don't store it yet since commands may need to add more info
 		_, err := cfg.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {
@@ -123,6 +114,11 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	}
 
 	log.SetOutput(output)
+	if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
+		//nolint:all
+		log.Fatal(err)
+	}
+	log.Debug("Set", "logs-level", log.GetLevel(), "logs-file", atmosConfig.Logs.File)
 }
 
 // TODO: This function works well, but we should generally avoid implementing manual flag parsing,
