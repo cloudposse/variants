@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	log "github.com/charmbracelet/log"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 
@@ -238,17 +239,21 @@ func max(a, b int) int {
 	return b
 }
 
-func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd {
+func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd { //nolint:gocritic
 	return func() tea.Msg {
+		log.Debug("Downloading and installing package", "package", p.name)
 		if dryRun {
-			// Simulate the action
-			time.Sleep(500 * time.Millisecond)
-			return installedPkgMsg{
-				err:  nil,
-				name: p.name,
+			log.Debug("Entering dry-run flow for generic vendoring (not a component or mixin)", "package", p.name)
+			detector := &CustomGitDetector{AtmosConfig: &atmosConfig}
+			_, _, err := detector.Detect(p.uri, "")
+			if err != nil {
+				return installedPkgMsg{
+					err:  fmt.Errorf("dry-run: detection failed: %w", err),
+					name: p.name,
+				}
 			}
-		}
-		// Create temp directory
+			return installedPkgMsg{err: nil, name: p.name}
+		} // Create temp directory
 		tempDir, err := os.MkdirTemp("", "atmos-vendor")
 		if err != nil {
 			return installedPkgMsg{
@@ -269,7 +274,7 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig schema.Atmos
 		switch p.pkgType {
 		case pkgTypeRemote:
 			// Use go-getter to download remote packages
-			if err := GoGetterGet(atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
+			if err := GoGetterGet(&atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
 				return installedPkgMsg{
 					err:  fmt.Errorf("failed to download package: %w", err),
 					name: p.name,

@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	log "github.com/charmbracelet/log"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 
@@ -63,15 +64,21 @@ func newModelComponentVendorInternal(pkgs []pkgComponentVendor, dryRun bool, atm
 	}, nil
 }
 
-func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd {
+func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig schema.AtmosConfiguration) tea.Cmd { //nolint:gocritic
 	return func() tea.Msg {
 		if dryRun {
-			// Simulate the action
-			time.Sleep(100 * time.Millisecond)
-			return installedPkgMsg{
-				err:  nil,
-				name: p.name,
-			}
+			log.Debug("vendoring component (dry-run)", "component", p.name)
+			return func() tea.Msg {
+				detector := &CustomGitDetector{AtmosConfig: &atmosConfig}
+				_, _, err := detector.Detect(p.uri, "")
+				if err != nil {
+					return installedPkgMsg{
+						err:  fmt.Errorf("dry-run: detection failed: %w", err),
+						name: p.name,
+					}
+				}
+				return installedPkgMsg{err: nil, name: p.name}
+			}()
 		}
 		if p.IsComponent {
 			err := installComponent(p, atmosConfig)
@@ -127,15 +134,15 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 	case pkgTypeRemote:
 		tempDir = filepath.Join(tempDir, SanitizeFileName(p.uri))
 
-		if err = GoGetterGet(atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
-			return fmt.Errorf("failed to download package %s error %s", p.name, err)
+		if err = GoGetterGet(&atmosConfig, p.uri, tempDir, getter.ClientModeAny, 10*time.Minute); err != nil {
+			return fmt.Errorf("failed to download package %s: %w", p.name, err) //nolint:err113
 		}
 
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
 		err = processOciImage(atmosConfig, p.uri, tempDir)
 		if err != nil {
-			return fmt.Errorf("Failed to process OCI image %s error %s", p.name, err)
+			return fmt.Errorf("Failed to process OCI image %s error %s", p.name, err) //nolint:err113
 		}
 
 	case pkgTypeLocal:
@@ -155,14 +162,13 @@ func installComponent(p *pkgComponentVendor, atmosConfig schema.AtmosConfigurati
 		}
 
 		if err = cp.Copy(p.uri, tempDir2, copyOptions); err != nil {
-			return fmt.Errorf("failed to copy package %s error %s", p.name, err)
+			return fmt.Errorf("failed to copy package %s: %w", p.name, err)
 		}
 	default:
-		return fmt.Errorf("unknown package type %s package %s", p.pkgType.String(), p.name)
-
+		return fmt.Errorf("unknown package type %s package %s", p.pkgType.String(), p.name) //nolint:err113
 	}
 	if err = copyComponentToDestination(atmosConfig, tempDir, p.componentPath, p.vendorComponentSpec, p.sourceIsLocalFile, p.uri); err != nil {
-		return fmt.Errorf("failed to copy package %s error %s", p.name, err)
+		return fmt.Errorf("failed to copy package %s error %s", p.name, err) //nolint:err113
 	}
 
 	return nil
@@ -178,8 +184,8 @@ func installMixin(p *pkgComponentVendor, atmosConfig schema.AtmosConfiguration) 
 
 	switch p.pkgType {
 	case pkgTypeRemote:
-		if err = GoGetterGet(atmosConfig, p.uri, filepath.Join(tempDir, p.mixinFilename), getter.ClientModeFile, 10*time.Minute); err != nil {
-			return fmt.Errorf("failed to download package %s error %s", p.name, err)
+		if err = GoGetterGet(&atmosConfig, p.uri, filepath.Join(tempDir, p.mixinFilename), getter.ClientModeFile, 10*time.Minute); err != nil {
+			return fmt.Errorf("failed to download package %s error %s", p.name, err) //nolint:err113
 		}
 
 	case pkgTypeOci:
