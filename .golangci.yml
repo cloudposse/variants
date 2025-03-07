@@ -103,7 +103,7 @@ linters-settings:
       - name: add-constant
         arguments:
           - maxLitCount: "3"
-            allowStrs: '""'
+            allowStrs: '"","error","path","import"'
             allowInts: "0,1,2,3,4"
             allowFloats: "0.0,0.,1.0,1.,2.0,2."
       - name: argument-limit
@@ -113,7 +113,7 @@ linters-settings:
       - name: comment-spacings
         severity: warning
         disabled: false
-        exclude: [""]
+        exclude: []
         arguments:
           - mypragma
           - otherpragma
