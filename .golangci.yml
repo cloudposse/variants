@@ -50,14 +50,6 @@ linters-settings:
     excludes:
       - G101 # Look for hard coded credentials
 
-  gofmt:
-    # Simplify code: gofmt -s
-    simplify: true
-    # Define indentation
-    rewrite-rules:
-      - pattern: "interface{}"
-        replacement: "any"
-
   cyclop:
     # Maximum function complexity
     max-complexity: 15
@@ -103,7 +95,7 @@ linters-settings:
       - name: add-constant
         arguments:
           - maxLitCount: "3"
-            allowStrs: '""'
+            allowStrs: '"","error"'
             allowInts: "0,1,2,3,4"
             allowFloats: "0.0,0.,1.0,1.,2.0,2."
       - name: argument-limit
@@ -168,6 +160,7 @@ issues:
         - funlen
         - revive
         - gci
+        - gocognit
 
 output:
   formats:
